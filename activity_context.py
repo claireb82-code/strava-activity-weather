@@ -132,14 +132,18 @@ def reverse_geocode(lat, lng):
         headers={"User-Agent": "strava-activity-weather/1.0 (personal automation script)"},
     )
     addr = resp.get("address", {})
+    # Prefer the actual settlement name (city/town/village) — smaller labels
+    # like "hamlet" or "neighbourhood" can name a tiny sub-area that isn't
+    # how the place is normally identified (e.g. "Letten" hamlet inside the
+    # village of Rümlang), so they're only used as a qualifier, not primary.
     place = (
-        addr.get("neighbourhood") or addr.get("suburb") or addr.get("hamlet")
-        or addr.get("village") or addr.get("town") or addr.get("city")
+        addr.get("city") or addr.get("town") or addr.get("village")
+        or addr.get("municipality") or addr.get("hamlet")
     )
-    region = addr.get("city") or addr.get("town") or addr.get("state")
-    if place and region and place != region:
-        return f"{place}, {region}"
-    return place or region or resp.get("display_name", "").split(",")[0]
+    sub = addr.get("suburb") or addr.get("neighbourhood") or addr.get("quarter")
+    if sub and place and sub != place:
+        return f"{sub}, {place}"
+    return place or resp.get("display_name", "").split(",")[0]
 
 
 def fetch_weather(lat, lng, local_date, local_hour):
