@@ -4,7 +4,7 @@ Automatically appends the geographical location and weather conditions to
 the description of recent Strava **Walk**, **Hike**, and **Snowboard**
 activities. This project only ever touches those activity types — it never
 modifies rides, runs, or any other activity or account setting (that's what
-[`strava-commute-titler`](../strava-commute-titler) is for).
+[`strava-commute-titler`](https://github.com/claireb82-code/strava-commute-titler) is for).
 
 For each matching activity that doesn't already have this info, the script:
 
