@@ -2,8 +2,9 @@
 
 Automatically appends the geographical location and weather conditions to
 the description of recent Strava **Walk**, **Hike**, and **Snowboard**
-activities. This project only ever touches those activity types — it never
-modifies rides, runs, or any other activity or account setting (that's what
+activities, and renames still-default-titled ones to something more fun.
+This project only ever touches those activity types — it never modifies
+rides, runs, or any other activity or account setting (that's what
 [`strava-commute-titler`](https://github.com/claireb82-code/strava-commute-titler) is for).
 
 For each matching activity that doesn't already have this info, the script:
@@ -15,9 +16,15 @@ For each matching activity that doesn't already have this info, the script:
   conditions (e.g. "Partly cloudy")
 - Appends a line like `📍 Letten, Zürich — 18°C, Mainly clear` to the
   activity's description, preserving whatever was already there
+- If the activity still has one of Strava's generic default titles (e.g.
+  "Morning Walk", "Lunch Hike"), renames it to something playful built from
+  the activity type, location, and weather — e.g. "Foggy Ramble through
+  Letten", "Powder Chase near Letten". Titles you've already customized
+  yourself are never touched.
 
 Matching is idempotent: an activity is skipped once its description already
-contains the 📍 marker, so re-running never duplicates or overwrites it.
+contains the 📍 marker, so re-running never duplicates the description or
+renames a title twice.
 
 ## Setup
 

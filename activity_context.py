@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Appends location and weather conditions to the description of recent
-Strava walks, hikes, and snowboard activities. Never touches any other
-activity type, and never touches an activity that already has this info."""
+Strava walks, hikes, and snowboard activities, and renames still-default-
+titled ones to a fun name based on activity, location, and weather. Never
+touches any other activity type, and never re-touches an activity that
+already has this info."""
 
 import json
+import random
 import re
 import sys
 import time
@@ -30,7 +33,45 @@ WEATHER_CODES = {
     95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Thunderstorm with heavy hail",
 }
 
+# Groups of Open-Meteo weather codes to playful title adjectives.
+WEATHER_ADJECTIVES = {
+    "clear": (["0", "1"], ["Sunny", "Golden", "Bluebird", "Sunshine-Soaked"]),
+    "cloudy": (["2", "3"], ["Cloud-Dappled", "Grey-Sky", "Moody"]),
+    "fog": (["45", "48"], ["Foggy", "Misty", "Hazy"]),
+    "rain": (["51", "53", "55", "56", "57", "61", "63", "65", "66", "67", "80", "81", "82"],
+             ["Rainy", "Drizzly", "Soggy", "Puddle-Jumping"]),
+    "snow": (["71", "73", "75", "77", "85", "86"], ["Snowy", "Powder", "Frosty", "Wintry"]),
+    "storm": (["95", "96", "99"], ["Stormy", "Thunder-Chasing", "Electric"]),
+}
+WEATHER_ADJECTIVES_BY_CODE = {
+    int(code): adjectives
+    for codes, adjectives in WEATHER_ADJECTIVES.values()
+    for code in codes
+}
+FALLBACK_ADJECTIVES = ["Fresh-Air", "Open-Sky", "Wide-Open"]
+
+ACTIVITY_NOUNS = {
+    "Walk": ["Wander", "Stroll", "Ramble", "Amble", "Saunter", "Meander"],
+    "Hike": ["Trek", "Trail Quest", "Summit Push", "Climb", "Ridge Ramble"],
+    "Snowboard": ["Powder Chase", "Shred Session", "Carve Run", "Slope Ride"],
+}
+CONNECTORS = ["in", "through", "at", "around", "near"]
+
+# Matches Strava's auto-generated titles like "Morning Walk", "Lunch Hike".
+DEFAULT_TITLE_RE = re.compile(r"^(morning|afternoon|evening|night|lunch)\s+\S+$", re.IGNORECASE)
+
 DRY_RUN = "--dry-run" in sys.argv
+
+
+def generate_title(activity_type, place, weather_code):
+    noun = random.choice(ACTIVITY_NOUNS.get(activity_type, ["Outing"]))
+    adjectives = WEATHER_ADJECTIVES_BY_CODE.get(weather_code, FALLBACK_ADJECTIVES)
+    adjectives = [a for a in adjectives if a.lower() not in noun.lower()] or adjectives
+    adjective = random.choice(adjectives)
+    if place:
+        connector = random.choice(CONNECTORS)
+        return f"{adjective} {noun} {connector} {place}"
+    return f"{adjective} {noun}"
 
 
 def load_env():
@@ -122,10 +163,7 @@ def fetch_weather(lat, lng, local_date, local_hour):
         return None
     target = f"{local_date}T{local_hour:02d}:00"
     idx = min(range(len(times)), key=lambda i: abs(_hours_between(times[i], target)))
-    temp = temps[idx]
-    code = codes[idx]
-    condition = WEATHER_CODES.get(code, f"code {code}")
-    return f"{round(temp)}°C, {condition}"
+    return temps[idx], codes[idx]
 
 
 def _hours_between(t1, t2):
@@ -182,10 +220,16 @@ def main():
         local_hour = int(start_date_local[11:13]) if len(start_date_local) >= 13 else 12
 
         try:
-            weather = fetch_weather(lat, lng, local_date, local_hour)
+            weather_result = fetch_weather(lat, lng, local_date, local_hour)
         except Exception as e:
             log(f"Weather lookup failed for activity {act_id}: {e}")
-            weather = None
+            weather_result = None
+
+        weather = None
+        weather_code = None
+        if weather_result:
+            temp, weather_code = weather_result
+            weather = f"{round(temp)}°C, {WEATHER_CODES.get(weather_code, f'code {weather_code}')}"
 
         if not location and not weather:
             log(f"Skipping activity {act_id} '{act.get('name')}': no location or weather available")
@@ -199,18 +243,34 @@ def main():
         info_line = " ".join(parts)
 
         new_description = f"{description}\n{info_line}".strip() if description else info_line
+        update_data = {"description": new_description}
+
+        current_name = act.get("name", "")
+        new_name = None
+        if DEFAULT_TITLE_RE.match(current_name.strip()):
+            place = location.split(",")[0].strip() if location else None
+            new_name = generate_title(act.get("type"), place, weather_code)
+            update_data["name"] = new_name
 
         if DRY_RUN:
-            log(f"[dry-run] Would update activity {act_id} '{act.get('name')}' description to:\n{new_description}")
+            log(
+                f"[dry-run] Would update activity {act_id} '{current_name}': "
+                f"name -> '{new_name}', description += '{info_line}'"
+                if new_name else
+                f"[dry-run] Would update activity {act_id} '{current_name}' description to:\n{new_description}"
+            )
             continue
 
         updated = api_request(
             f"https://www.strava.com/api/v3/activities/{act_id}",
             method="PUT",
-            data={"description": new_description},
+            data=update_data,
             headers=headers,
         )
-        log(f"Updated activity {act_id} '{act.get('name')}' with: {info_line}")
+        log(
+            f"Updated activity {act_id}: name '{current_name}' -> '{updated.get('name')}', "
+            f"description += '{info_line}'"
+        )
 
 
 if __name__ == "__main__":
