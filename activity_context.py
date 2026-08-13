@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Appends location and weather conditions to the description of recent
 Strava walks, hikes, and snowboard activities, and renames still-default-
-titled ones to a fun name based on activity, location, and weather. Never
-touches any other activity type, and never re-touches an activity that
-already has this info."""
+titled ones to a factual name based on activity, location, and weather.
+Never touches any other activity type, and never re-touches an activity
+that already has this info."""
 
 import json
-import random
 import re
 import sys
 import time
@@ -33,29 +32,19 @@ WEATHER_CODES = {
     95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Thunderstorm with heavy hail",
 }
 
-# Groups of Open-Meteo weather codes to playful title adjectives.
-WEATHER_ADJECTIVES = {
-    "clear": (["0", "1"], ["Sunny", "Golden", "Bluebird", "Sunshine-Soaked"]),
-    "cloudy": (["2", "3"], ["Cloud-Dappled", "Grey-Sky", "Moody"]),
-    "fog": (["45", "48"], ["Foggy", "Misty", "Hazy"]),
-    "rain": (["51", "53", "55", "56", "57", "61", "63", "65", "66", "67", "80", "81", "82"],
-             ["Rainy", "Drizzly", "Soggy", "Puddle-Jumping"]),
-    "snow": (["71", "73", "75", "77", "85", "86"], ["Snowy", "Powder", "Frosty", "Wintry"]),
-    "storm": (["95", "96", "99"], ["Stormy", "Thunder-Chasing", "Electric"]),
+# Short, title-friendly condition labels, keyed by the same Open-Meteo codes.
+TITLE_CONDITIONS = {
+    0: "Clear", 1: "Mostly Clear", 2: "Partly Cloudy", 3: "Overcast",
+    45: "Foggy", 48: "Foggy",
+    51: "Light Drizzle", 53: "Drizzle", 55: "Heavy Drizzle",
+    56: "Freezing Drizzle", 57: "Freezing Drizzle",
+    61: "Light Rain", 63: "Rain", 65: "Heavy Rain",
+    66: "Freezing Rain", 67: "Freezing Rain",
+    71: "Light Snow", 73: "Snow", 75: "Heavy Snow", 77: "Snow",
+    80: "Rain Showers", 81: "Rain Showers", 82: "Heavy Rain Showers",
+    85: "Snow Showers", 86: "Heavy Snow Showers",
+    95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm",
 }
-WEATHER_ADJECTIVES_BY_CODE = {
-    int(code): adjectives
-    for codes, adjectives in WEATHER_ADJECTIVES.values()
-    for code in codes
-}
-FALLBACK_ADJECTIVES = ["Fresh-Air", "Open-Sky", "Wide-Open"]
-
-ACTIVITY_NOUNS = {
-    "Walk": ["Wander", "Stroll", "Ramble", "Amble", "Saunter", "Meander"],
-    "Hike": ["Trek", "Trail Quest", "Summit Push", "Climb", "Ridge Ramble"],
-    "Snowboard": ["Powder Chase", "Shred Session", "Carve Run", "Slope Ride"],
-}
-CONNECTORS = ["in", "through", "at", "around", "near"]
 
 # Matches Strava's auto-generated titles like "Morning Walk", "Lunch Hike".
 DEFAULT_TITLE_RE = re.compile(r"^(morning|afternoon|evening|night|lunch)\s+\S+$", re.IGNORECASE)
@@ -64,14 +53,15 @@ DRY_RUN = "--dry-run" in sys.argv
 
 
 def generate_title(activity_type, place, weather_code):
-    noun = random.choice(ACTIVITY_NOUNS.get(activity_type, ["Outing"]))
-    adjectives = WEATHER_ADJECTIVES_BY_CODE.get(weather_code, FALLBACK_ADJECTIVES)
-    adjectives = [a for a in adjectives if a.lower() not in noun.lower()] or adjectives
-    adjective = random.choice(adjectives)
+    parts = []
+    condition = TITLE_CONDITIONS.get(weather_code)
+    if condition:
+        parts.append(condition)
+    parts.append(activity_type or "Activity")
+    title = " ".join(parts)
     if place:
-        connector = random.choice(CONNECTORS)
-        return f"{adjective} {noun} {connector} {place}"
-    return f"{adjective} {noun}"
+        title += f" — {place}"
+    return title
 
 
 def load_env():
