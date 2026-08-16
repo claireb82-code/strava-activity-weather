@@ -34,8 +34,10 @@ WEATHER_CODES = {
 }
 
 # Short, title-friendly condition labels, keyed by the same Open-Meteo codes.
+# "Clear"/"Sunny" alone doesn't say whether it was warm or freezing, so these
+# are combined with a temperature band below rather than used alone.
 TITLE_CONDITIONS = {
-    0: "Clear", 1: "Mostly Clear", 2: "Partly Cloudy", 3: "Overcast",
+    0: "Sunny", 1: "Sunny", 2: "Partly Cloudy", 3: "Overcast",
     45: "Foggy", 48: "Foggy",
     51: "Light Drizzle", 53: "Drizzle", 55: "Heavy Drizzle",
     56: "Freezing Drizzle", 57: "Freezing Drizzle",
@@ -47,18 +49,38 @@ TITLE_CONDITIONS = {
     95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm",
 }
 
+# Celsius upper bound (exclusive) -> temperature-band label, checked in order.
+TEMP_BANDS = [
+    (0, "Freezing"), (10, "Cold"), (16, "Cool"), (23, "Mild"), (29, "Warm"),
+]
+HOT_LABEL = "Hot"
+
 # Matches Strava's auto-generated titles like "Morning Walk", "Lunch Hike".
 DEFAULT_TITLE_RE = re.compile(r"^(morning|afternoon|evening|night|lunch)\s+\S+$", re.IGNORECASE)
 
 DRY_RUN = "--dry-run" in sys.argv
 
 
-def generate_title(activity_type, place, weather_code):
-    parts = []
+def temp_band(temp):
+    if temp is None:
+        return None
+    for upper_bound, label in TEMP_BANDS:
+        if temp < upper_bound:
+            return label
+    return HOT_LABEL
+
+
+def generate_title(activity_type, place, weather_code, temp=None):
     condition = TITLE_CONDITIONS.get(weather_code)
+    band = temp_band(temp)
+
+    parts = []
+    if band and (not condition or band.lower() not in condition.lower()):
+        parts.append(band)
     if condition:
         parts.append(condition)
     parts.append(activity_type or "Activity")
+
     title = " ".join(parts)
     if place:
         title += f" — {place}"
@@ -222,6 +244,7 @@ def main():
 
         weather = None
         weather_code = None
+        temp = None
         if weather_result:
             temp, weather_code = weather_result
             weather = f"{round(temp)}°C, {WEATHER_CODES.get(weather_code, f'code {weather_code}')}"
@@ -234,7 +257,7 @@ def main():
         new_name = None
         if DEFAULT_TITLE_RE.match(current_name.strip()):
             place = location.split(",")[0].strip() if location else None
-            new_name = generate_title(act.get("type"), place, weather_code)
+            new_name = generate_title(act.get("type"), place, weather_code, temp)
 
         parts = [MARKER]
         if location:
