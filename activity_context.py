@@ -138,25 +138,35 @@ def refresh_access_token(env):
     return resp["access_token"]
 
 
-def reverse_geocode(lat, lng):
+def _nominatim_reverse(lat, lng, zoom):
     resp = api_request(
         "https://nominatim.openstreetmap.org/reverse",
-        params={"format": "jsonv2", "lat": lat, "lon": lng, "zoom": 14},
+        params={"format": "jsonv2", "lat": lat, "lon": lng, "zoom": zoom},
         headers={"User-Agent": "strava-activity-weather/1.0 (personal automation script)"},
     )
-    addr = resp.get("address", {})
-    # Prefer the actual settlement name (city/town/village) — smaller labels
-    # like "hamlet" or "neighbourhood" can name a tiny sub-area that isn't
-    # how the place is normally identified (e.g. "Letten" hamlet inside the
-    # village of Rümlang), so they're only used as a qualifier, not primary.
+    return resp.get("address", {}), resp.get("display_name", "")
+
+
+def reverse_geocode(lat, lng):
+    # A single fine-grained query isn't reliable: depending on how the area
+    # is mapped in OpenStreetMap, a tiny hamlet/hillside locality can be
+    # tagged as "village" too, shadowing the actual town it belongs to (e.g.
+    # "Mondacce" instead of "Minusio", or "Letten" instead of "Rümlang").
+    # A coarse query reliably resolves to the real enclosing settlement, so
+    # that's used as the primary place; the fine query only contributes a
+    # genuine suburb/neighbourhood qualifier, never a competing village/hamlet.
+    coarse_addr, coarse_display = _nominatim_reverse(lat, lng, zoom=10)
+    time.sleep(1)  # Nominatim usage policy: max 1 req/sec
+    fine_addr, _ = _nominatim_reverse(lat, lng, zoom=14)
+
     place = (
-        addr.get("city") or addr.get("town") or addr.get("village")
-        or addr.get("municipality") or addr.get("hamlet")
+        coarse_addr.get("city") or coarse_addr.get("town") or coarse_addr.get("village")
+        or coarse_addr.get("municipality")
     )
-    sub = addr.get("suburb") or addr.get("neighbourhood") or addr.get("quarter")
+    sub = fine_addr.get("suburb") or fine_addr.get("neighbourhood") or fine_addr.get("quarter")
     if sub and place and sub != place:
         return f"{sub}, {place}"
-    return place or resp.get("display_name", "").split(",")[0]
+    return place or coarse_display.split(",")[0]
 
 
 def fetch_weather(lat, lng, local_date, local_hour):

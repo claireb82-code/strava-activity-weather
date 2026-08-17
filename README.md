@@ -10,7 +10,11 @@ runs, or any other activity or account setting (that's what
 For each matching activity that doesn't already have this info, the script:
 
 - Reverse-geocodes the start coordinates via [OpenStreetMap Nominatim](https://nominatim.org)
-  (free, no API key) to get a neighbourhood/city name
+  (free, no API key) to get a neighbourhood/city name. Queries at two zoom
+  levels: a coarse one for the real enclosing town (OSM sometimes tags a
+  tiny hamlet/hillside locality as "village" too, which would otherwise
+  shadow the actual town — e.g. "Mondacce" instead of "Minusio"), and a
+  fine one only for a genuine suburb/neighbourhood qualifier
 - Looks up historical weather for that place and time via
   [Open-Meteo](https://open-meteo.com) (free, no API key) — temperature and
   conditions (e.g. "Partly cloudy")
