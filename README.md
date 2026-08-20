@@ -63,9 +63,17 @@ launchctl unload ~/Library/LaunchAgents/com.claire.strava-activity-weather.plist
 
 ## Notes
 
+- All network requests use a 30-second timeout. Without one, a stalled
+  connection could hang the script indefinitely — and since this runs as a
+  `StartInterval` LaunchAgent, launchd won't fire the next scheduled run
+  until the current process exits, so a single hung request silently paused
+  the whole automation (this happened for 36+ hours before being caught).
 - Weather comes from Open-Meteo's forecast endpoint with `start_date`/`end_date`
   set to the activity's local date, not the historical archive endpoint —
   the archive (ERA5) has a ~5 day delay, which would miss anything recent.
+  A failed weather lookup is retried once after a 5s delay before falling
+  back to a location-only update, since a transient API error would
+  otherwise be marked processed and never retried.
 - Nominatim's usage policy caps requests at 1/sec; the script sleeps between
   calls accordingly.
 - `.env` is git-ignored and never committed — it contains the API secret and

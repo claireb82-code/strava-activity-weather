@@ -110,6 +110,9 @@ def log(msg):
         f.write(line + "\n")
 
 
+REQUEST_TIMEOUT_SECONDS = 30
+
+
 def api_request(url, method="GET", data=None, headers=None, params=None):
     if params:
         url = url + "?" + urllib.parse.urlencode(params)
@@ -117,7 +120,7 @@ def api_request(url, method="GET", data=None, headers=None, params=None):
     if data is not None:
         body = urllib.parse.urlencode(data).encode()
     req = urllib.request.Request(url, data=body, method=method, headers=headers or {})
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
         return json.loads(resp.read().decode())
 
 
@@ -193,6 +196,22 @@ def fetch_weather(lat, lng, local_date, local_hour):
     return temps[idx], codes[idx]
 
 
+WEATHER_RETRY_ATTEMPTS = 2
+WEATHER_RETRY_DELAY_SECONDS = 5
+
+
+def fetch_weather_with_retry(lat, lng, local_date, local_hour):
+    last_error = None
+    for attempt in range(WEATHER_RETRY_ATTEMPTS):
+        try:
+            return fetch_weather(lat, lng, local_date, local_hour)
+        except Exception as e:
+            last_error = e
+            if attempt < WEATHER_RETRY_ATTEMPTS - 1:
+                time.sleep(WEATHER_RETRY_DELAY_SECONDS)
+    raise last_error
+
+
 def _hours_between(t1, t2):
     def to_minutes(t):
         _, hm = t.split("T")
@@ -247,9 +266,9 @@ def main():
         local_hour = int(start_date_local[11:13]) if len(start_date_local) >= 13 else 12
 
         try:
-            weather_result = fetch_weather(lat, lng, local_date, local_hour)
+            weather_result = fetch_weather_with_retry(lat, lng, local_date, local_hour)
         except Exception as e:
-            log(f"Weather lookup failed for activity {act_id}: {e}")
+            log(f"Weather lookup failed for activity {act_id} after retry: {e}")
             weather_result = None
 
         weather = None
