@@ -34,8 +34,6 @@ WEATHER_CODES = {
 }
 
 # Short, title-friendly condition labels, keyed by the same Open-Meteo codes.
-# "Clear"/"Sunny" alone doesn't say whether it was warm or freezing, so these
-# are combined with a temperature band below rather than used alone.
 TITLE_CONDITIONS = {
     0: "Sunny", 1: "Sunny", 2: "Partly Cloudy", 3: "Overcast",
     45: "Foggy", 48: "Foggy",
@@ -49,39 +47,25 @@ TITLE_CONDITIONS = {
     95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm",
 }
 
-# Celsius upper bound (exclusive) -> temperature-band label, checked in order.
-TEMP_BANDS = [
-    (0, "Freezing"), (10, "Cold"), (16, "Cool"), (23, "Mild"), (29, "Warm"),
-]
-HOT_LABEL = "Hot"
-
-# Matches Strava's auto-generated titles like "Morning Walk", "Lunch Hike".
+# Matches Strava's auto-generated titles like "Morning Walk", "Lunch Hike" —
+# the time-of-day group is reused in the generated title itself.
 DEFAULT_TITLE_RE = re.compile(r"^(morning|afternoon|evening|night|lunch)\s+\S+$", re.IGNORECASE)
 
 DRY_RUN = "--dry-run" in sys.argv
 
 
-def temp_band(temp):
-    if temp is None:
-        return None
-    for upper_bound, label in TEMP_BANDS:
-        if temp < upper_bound:
-            return label
-    return HOT_LABEL
-
-
-def generate_title(activity_type, place, weather_code, temp=None):
-    condition = TITLE_CONDITIONS.get(weather_code)
-    band = temp_band(temp)
-
+def generate_title(activity_type, place, weather_code, temp=None, time_of_day=None):
     parts = []
-    if band and (not condition or band.lower() not in condition.lower()):
-        parts.append(band)
+    if time_of_day:
+        parts.append(time_of_day.capitalize())
+    condition = TITLE_CONDITIONS.get(weather_code)
     if condition:
         parts.append(condition)
     parts.append(activity_type or "Activity")
 
     title = " ".join(parts)
+    if temp is not None:
+        title += f", {round(temp)}°C"
     if place:
         title += f" — {place}"
     return title
@@ -284,9 +268,11 @@ def main():
 
         current_name = act.get("name", "")
         new_name = None
-        if DEFAULT_TITLE_RE.match(current_name.strip()):
+        default_match = DEFAULT_TITLE_RE.match(current_name.strip())
+        if default_match:
             place = location.split(",")[0].strip() if location else None
-            new_name = generate_title(act.get("type"), place, weather_code, temp)
+            time_of_day = default_match.group(1)
+            new_name = generate_title(act.get("type"), place, weather_code, temp, time_of_day)
 
         parts = [MARKER]
         if location:
